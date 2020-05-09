@@ -66,3 +66,5 @@ def count_maxlength():
     for i in range(5):
         print(files.iloc[index[i]][attrs[i]])
 
+if __name__ == "__main__":
+    connect_sql();
