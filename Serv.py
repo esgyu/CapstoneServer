@@ -3,9 +3,11 @@ import werkzeug
 import time
 import image_proc as imp
 import os
-from flask import request, render_template
+from flask import request, jsonify
+import json
 
 app = flask.Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
 
 @app.route('/')
 def hello():
@@ -29,12 +31,13 @@ def handle_request():
         timestr = time.strftime("%Y%m%d-%H%M%S")
         imagefile.save(timestr+'_'+filename)
         try:
-            imp.image_warp(timestr+'_'+filename)
+            ret = imp.image_warp(timestr+'_'+filename)
         except Exception as ex :
             print('에러가 발생했습니다.', ex)
             return 'Image Processing Failed!'
         os.remove(timestr+'_'+filename)
     print("\n")
-    return "Image(s) Uploaded Successfully. Come Back Soon."
+    return json.dumps(ret, ensure_ascii=False)
+    #return "Image(s) Uploaded Successfully. Come Back Soon."
 
 app.run(host="0.0.0.0", port=5000, debug=True)
