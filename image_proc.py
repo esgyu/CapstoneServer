@@ -3,8 +3,6 @@ import numpy as np
 import pytesseract as pt
 import re
 import db_connect as db
-from flask import jsonify
-import json
 
 def image_warp(src_loc):
     # 이미지 읽기
@@ -99,20 +97,40 @@ def image_warp(src_loc):
     result = clahe.apply(result)
     #printimg('CLAHE', result)
     # Binary Image Elimination
-    ret, result = cv2.threshold(result, 127, 255, cv2.THRESH_BINARY)
-    #printimg('Binary Image', result)
+    C = 5
+    blk_size = 9
+    result = cv2.adaptiveThreshold(result, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, blk_size, C)
+    #printimg('Adaptive Binary Image', result)
     # LPF
     result = cv2.bilateralFilter(result,9, 75, 75)
     #printimg('LPF', result)
-    # Sobel Mask로 Line Elimiation 필요...
-    # sobel_x = cv2.Sobel(result, cv2.CV_64F, 1, 0, ksize=3)
-    # sobel_x = cv2.convertScaleAbs(sobel_x)
-    # sobel_y = cv2.Sobel(result, cv2.CV_64F, 0, 1, ksize=3)
-    # sobel_y = cv2.convertScaleAbs(sobel_y)
-    # cv2.imshow('sobel', sobel_x)
-    # cv2.waitKey(0)
-    # cv2.imshow('sobel', sobel_y)
-    # cv2.waitKey(0)
+
+
+    # Line Elimination
+    temp = result
+    temp = cv2.bitwise_not(temp)
+    th2 = cv2.adaptiveThreshold(temp, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -2)
+
+    horizontal = th2
+    vertical = th2
+    rows, cols = horizontal.shape
+
+    horizontalsize = int(cols / 30)
+    horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontalsize, 1))
+    horizontal = cv2.erode(horizontal, horizontalStructure, (-1, -1))
+    horizontal = cv2.dilate(horizontal, horizontalStructure, (-1, -1))
+
+    verticalsize = int(rows / 30)
+    verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, verticalsize))
+    vertical = cv2.erode(vertical, verticalStructure, (-1, -1))
+    vertical = cv2.dilate(vertical, verticalStructure, (-1, -1))
+
+    sum = cv2.add(vertical, horizontal)
+    temp = cv2.absdiff(sum, temp)
+
+    temp = 255 - temp
+    temp = cv2.bilateralFilter(temp, 9, 75, 75)
+    result = temp
 
     text = pt.image_to_string(result, config='--psm 6', lang='kor')
     print("================ OCR result ================")
@@ -139,5 +157,5 @@ def printimg(label, img):
     cv2.destroyAllWindows()
 
 
-# if __name__ == '__main__':
-#     image_warp('KakaoTalk_20200510_161751771.jpg')
+if __name__ == '__main__':
+    image_warp('KakaoTalk_20200510_161622423.jpg')

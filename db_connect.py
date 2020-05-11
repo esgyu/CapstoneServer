@@ -1,6 +1,5 @@
 import pymysql
 import pandas as pd
-import numpy as np
 
 def connect_sql():
     drug_db = pymysql.connect(

@@ -3,7 +3,7 @@ import werkzeug
 import time
 import image_proc as imp
 import os
-from flask import request, jsonify, session
+from flask import request
 import json
 
 app = flask.Flask(__name__)
@@ -35,9 +35,8 @@ def handle_request():
             print('에러가 발생했습니다.', ex)
             return 'Image Processing Failed!'
         os.remove(timestr+'_'+filename)
-    print("\n")
+    print("Send Complete!\n")
     return json.dumps(ret, ensure_ascii=False)
 
 if __name__ == "__main__":
-    #app.run(host="0.0.0.0", port=5000, debug=True)
-    app.run()
+    app.run(host="0.0.0.0", port=5000, debug=True)
