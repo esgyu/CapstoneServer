@@ -3,7 +3,7 @@ import werkzeug
 import time
 import image_proc as imp
 import os
-from flask import request, jsonify
+from flask import request, jsonify, session
 import json
 
 app = flask.Flask(__name__)
@@ -13,13 +13,12 @@ app.config['JSON_AS_ASCII'] = False
 def hello():
     return '<p>Hello Main!</p>'
 
-@app.route('/string', methods = ['GET', 'POST'])
+@app.route('/string', methods = ['POST'])
 def print_result():
-    result = request.form['message']
-    print(result)
-    return result
+    message = request.form['message']
+    return message
 
-@app.route('/image', methods = ['GET', 'POST'])
+@app.route('/image', methods = ['POST'])
 def handle_request():
     files_ids = list(flask.request.files)
     print("\nNumber of Received Images : ", len(files_ids))
@@ -38,6 +37,6 @@ def handle_request():
         os.remove(timestr+'_'+filename)
     print("\n")
     return json.dumps(ret, ensure_ascii=False)
-    #return "Image(s) Uploaded Successfully. Come Back Soon."
 
-app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

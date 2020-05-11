@@ -13,7 +13,7 @@ def connect_sql():
 
     cursor = drug_db.cursor(pymysql.cursors.DictCursor)
 
-    files = pd.read_csv('drug_information.csv')
+    files = pd.read_csv('hello2.csv')
 
     attrs = [4, 5, 10, 11, 12, 13]
     attr = ['제품코드', '업체명', 'small_이미지', 'pack_img', '용법,용량', '효능,효과']
@@ -30,6 +30,61 @@ def connect_sql():
         cursor.execute(sql,(code, drug_name, small_image, pack_image))
     drug_db.commit()
 
+def update_sql() :
+    drug_db = pymysql.connect(
+        user='root',
+        passwd='root',
+        host='127.0.0.1',
+        db='drug_information',
+        charset='utf8'
+    )
+
+    cursor = drug_db.cursor(pymysql.cursors.DictCursor)
+
+    files = pd.read_csv('hello2.csv')
+
+    attrs = [4, 5, 10, 11, 12, 13]
+    attr = ['제품코드', '업체명', 'small_이미지', 'pack_img', '용법,용량', '효능,효과']
+
+    cnt = 0
+    for i in range(files.shape[0]):
+        code = int(files.iloc[i][4])
+        usages = str(files.iloc[i][12])
+        effect = str(files.iloc[i][13])
+        # usage = usage.replace('\xa0','')
+        # effect = effect.replace('\xa0','')
+
+        sql = 'update drug_info set usages = "{}", effect = "{}" where code = {}'.format(usages, effect, code)
+        #print(sql)
+        cursor.execute(sql)
+    drug_db.commit()
+
+def update_sql_name() :
+    drug_db = pymysql.connect(
+        user='root',
+        passwd='root',
+        host='127.0.0.1',
+        db='drug_information',
+        charset='utf8'
+    )
+
+    cursor = drug_db.cursor(pymysql.cursors.DictCursor)
+
+    files = pd.read_csv('hello2.csv')
+
+    attrs = [4, 5, 10, 11, 12, 13]
+    attr = ['제품코드', '업체명', 'small_이미지', 'pack_img', '용법,용량', '효능,효과']
+
+    cnt = 0
+    for i in range(files.shape[0]):
+        code = int(files.iloc[i][4])
+        drug_name = str(files.iloc[i][5])
+
+        sql = 'update drug_info set drug_name = "{}" where code = {}'.format(drug_name, code)
+        # print(sql)
+        cursor.execute(sql)
+    drug_db.commit()
+
 def selectQuery(codename) :
     drug_db = pymysql.connect(
         user='root',
@@ -39,7 +94,7 @@ def selectQuery(codename) :
         charset='utf8'
     )
     cursor = drug_db.cursor(pymysql.cursors.DictCursor)
-    sql = """select code, drug_name, small_image, pack_image from drug_info
+    sql = """select code, drug_name, small_image, pack_image, usages, effect from drug_info
                         where code = %s
                 """
     cursor.execute(sql, (codename))
@@ -67,4 +122,6 @@ def count_maxlength():
         print(files.iloc[index[i]][attrs[i]])
 
 if __name__ == "__main__":
-    connect_sql();
+    list = [671803511, 642101970, 643900710, 645403740, 640900250, 644302570, 644306170]
+    for i in list:
+        print(selectQuery(i))
