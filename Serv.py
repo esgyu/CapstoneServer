@@ -3,20 +3,22 @@ import werkzeug
 import time
 import image_proc as imp
 import os
-from flask import request
+from flask import request, jsonify, make_response
 import json
+import chat
+from OpenSSL import SSL
 
 app = flask.Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-@app.route('/')
+@app.route('/', methods = ['GET' , 'POST'])
 def hello():
-    return '<p>Hello Main!</p>'
+    return 'Hello Main!'
 
-@app.route('/string', methods = ['POST'])
-def print_result():
+@app.route('/webhook', methods = ['POST'])
+def webhook():
     message = request.form['message']
-    return message
+    return chat.get_answer(message,"1234")
 
 @app.route('/image', methods = ['POST'])
 def handle_request():
