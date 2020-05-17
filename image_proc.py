@@ -8,7 +8,6 @@ def image_warp(src_loc):
     # 이미지 읽기
     img = cv2.imread(src_loc)
     height, width = img.shape[:2]
-
     if width*4 != height*3 and width*1.2 > height:
         (h, w) = img.shape[:2]
         (cX, cY) = (w // 2, h // 2)
@@ -23,8 +22,6 @@ def image_warp(src_loc):
 
     if height>2560 and width > 1920:
         img = cv2.resize(img, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
-    else:
-        img = cv2.resize(img, dsize=(1280, 960), interpolation=cv2.INTER_AREA)
 
     draw = img.copy()
     # 그레이스 스케일 변환 및 케니 엣지
