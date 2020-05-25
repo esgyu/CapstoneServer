@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import pytesseract as pt
+from pytesseract import Output
 import re
 import db_connect as db
 
@@ -8,6 +9,7 @@ def image_warp(src_loc):
     # 이미지 읽기
     img = cv2.imread(src_loc)
     height, width = img.shape[:2]
+
     if width*4 != height*3 and width*1.2 > height:
         (h, w) = img.shape[:2]
         (cX, cY) = (w // 2, h // 2)
@@ -81,7 +83,6 @@ def image_warp(src_loc):
             # 원근 변환 적용
             result = cv2.warpPerspective(img, mtrx, (width, height))
             iswarp = True
-            #printimg('Warping', result)
         else:
             result = gray
     except Exception:
@@ -92,7 +93,7 @@ def image_warp(src_loc):
         result = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     result = clahe.apply(result)
-    #printimg('CLAHE', result)
+
     # Binary Image Elimination
     C = 5
     blk_size = 9
@@ -126,16 +127,23 @@ def image_warp(src_loc):
     temp = cv2.absdiff(sum, temp)
 
     temp = 255 - temp
+
     temp = cv2.bilateralFilter(temp, 9, 75, 75)
     result = temp
 
     text = pt.image_to_string(result, config='--psm 6', lang='kor')
+
     print("================ OCR result ================")
+    d = pt.image_to_data(result, output_type=Output.DICT)
+    n_boxes = len(d['level'])
+    for i in range(n_boxes):
+        (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
+        cv2.rectangle(result, (x, y), (x + w, y + h), (0, 255, 0), 2)
     return stringProcess(text)
 
 def stringProcess(text):
     # 9글자로 이루어진 의약품 코드 추출
-    codes = re.findall('[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+',text)
+    codes = re.findall('[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+', text)
     ret = {'drugs':[]}
     for code in codes:
         result = db.selectQuery(code)
@@ -155,4 +163,4 @@ def printimg(label, img):
 
 
 if __name__ == '__main__':
-    image_warp('KakaoTalk_20200510_161622423.jpg')
+    image_warp('KakaoTalk_20200517_183106849.jpg')

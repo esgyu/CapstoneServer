@@ -17,7 +17,8 @@ def hello():
 @app.route('/webhook', methods = ['POST'])
 def webhook():
     message = request.form['message']
-    return chat.get_answer(message, "1234")
+    user_name = request.form['username']
+    return chat.get_answer(message, user_name)
 
 @app.route('/image', methods = ['POST'])
 def handle_request():
