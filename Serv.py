@@ -18,7 +18,7 @@ def hello():
 def webhook():
     message = request.form['message']
     user_name = request.form['username']
-    return chat.get_answer(message, user_name)
+    return chat.detect_intent_texts(message, user_name)
 
 @app.route('/image', methods = ['POST'])
 def handle_request():
