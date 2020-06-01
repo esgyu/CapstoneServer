@@ -2,19 +2,20 @@ import cv2
 import numpy as np
 import text_detection
 
-def image_warp(src_loc):
+def image_warp(src_loc, net, layerNames):
     # 이미지 읽기
     img = cv2.imread(src_loc)
-
     img = image_resize(img)
-
     result = edge_detect(img)
+    return text_detection.text_detect(result, net, layerNames)
 
-    return text_detection.text_detect(result)
+def printimg(img):
+    cv2.imshow('aaa', img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 def image_resize(img) :
     height, width = img.shape[:2]
-
     if width * 4 != height * 3 and width * 1.2 > height:
         (h, w) = img.shape[:2]
         (cX, cY) = (w // 2, h // 2)
@@ -26,22 +27,24 @@ def image_resize(img) :
         M[0, 2] += (nW / 2) - cX
         M[1, 2] += (nH / 2) - cY
         img = cv2.warpAffine(img, M, (nW, nH))
-
     if height > 1920 and width > 1440:
         img = cv2.resize(img, (1440, 1920))
-
+    else:
+        if (height%32)!= 0 or (width%32)!=0:
+            nh = (height//32) * 32
+            nw = (width//32) * 32
+            img = cv2.resize(img, (nw, nh))
     return img
 
 def edge_detect(img):
+    (H, W) = img.shape[:2]
     # 그레이스 스케일 변환 및 케니 엣지
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)  # 가우시안 블러로 노이즈 제거
-    iswarp = False
     try:
         edged = cv2.Canny(gray, 75, 200)  # 케니 엣지로 경계 검출
         # 컨투어 찾기
         (cnts, _) = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # 모든 컨투어 그리기
         # 컨투어들 중에 영역 크기 순으로 정렬
         cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
         for c in cnts:
@@ -73,8 +76,8 @@ def edge_detect(img):
         width = max([w1, w2])  # 두 좌우 거리간의 최대값이 서류의 폭
         height = max([h1, h2])  # 두 상하 거리간의 최대값이 서류의 높이
 
-        # 검출 좌표 길이가 200 * 200 미만이면 원본이미지를 Gray Scaling함
-        if width > 200 and height > 200:
+        # 검출 좌표 길이가 원본이미지의 60%보다 작으면 잘못된 Warping으로 판단
+        if width > W*0.6 and height > H*0.6:
             # 변환 후 4개 좌표
             pts2 = np.float32([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
             # 변환 행렬 계산
@@ -85,12 +88,9 @@ def edge_detect(img):
             result = img
     except Exception:
         result = img
-
     H, W = result.shape[:2]
-
     if (H%32)!=0 or (W%32)!=0:
         result = cv2.resize(result, (1440, 1920))
-
     return result
 
 if __name__ == '__main__':

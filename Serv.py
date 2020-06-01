@@ -6,6 +6,7 @@ import os
 from flask import request
 import json
 import chat
+import cv2
 
 app = flask.Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
@@ -32,13 +33,21 @@ def handle_request():
         timestr = time.strftime("%Y%m%d-%H%M%S")
         imagefile.save(timestr+'_'+filename)
         try:
-            ret = imp.image_warp(timestr+'_'+filename)
+            ret = imp.image_warp(timestr+'_'+filename , net, layerNames)
         except Exception as ex :
             print('에러가 발생했습니다.', ex)
             return 'Image Processing Failed!'
-        os.remove(timestr+'_'+filename)
+        try:
+            os.remove(timestr+'_'+filename)
+        except Exception as ex:
+            print('파일 관리에 실패했습니다', ex)
     print("Send Complete!\n")
     return json.dumps(ret, ensure_ascii=False)
 
 if __name__ == "__main__":
+
+    layerNames = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
+    print("[INFO] loading EAST text detector...")
+    net = cv2.dnn.readNet('frozen_east_text_detection.pb')
+
     app.run(host="0.0.0.0", port=5000, debug=True)

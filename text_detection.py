@@ -1,34 +1,106 @@
-# USAGE
-# python text_detection.py --image images/lebron_james.jpg --east frozen_east_text_detection.pb
-
-# import the necessary packages
 from imutils.object_detection import non_max_suppression
 import numpy as np
 import time
 import pytesseract as pt
-import cv2
 import re
 from tqdm import tqdm
 import db_connect as db
-# load the input image and grab the image dimensions
+import cv2
 
 def stringProcess(text):
 	# 9글자로 이루어진 의약품 코드 추출
+	char = re.findall('[가-힣]+', text)
+	if char:
+		return None
 	codes = re.findall('[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+', text)
 	if codes:
 		return codes
 	codes = re.findall('[0-9]+[0-9]+[0-9]+', text)
 	if codes:
 		return 'maybe'
-	return 'not'
+	codes = re.findall('[0-9]+', text)
+	if codes:
+		return 'maybe'
+	return None
 
-def text_detect(image):
+def printimg(img):
+    cv2.imshow('aaa', img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+def text_roi_extension(image, startX, endX, startY, endY, W, H):
+	startX = max(startX - 5, 0)
+	endX = min(endX + 5, W)
+	startY = max(startY - 5, 0)
+	endY = min(endY + 10, H)
+
+	img = image[startY:endY, startX:endX]
+	img = cv2.pyrUp(img)
+	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 3, 5)
+	text = pt.image_to_string(gray, config='--psm 6', lang='kor')
+	res = stringProcess(text)
+
+	if not res:
+		return None
+	if res != 'maybe':
+		result = db.selectQuery(res)
+		if result:
+			return result
+
+	# x축 증가
+	for i in range(10, 100, 10):
+		if endX+i >= W:
+			break
+		img = cv2.pyrUp(image[startY+i//50:endY+i//50, startX:endX+i])
+		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 3, 5)
+		text = pt.image_to_string(gray, config='--psm 6', lang='kor')
+		res = stringProcess(text)
+		if res=='maybe':
+			continue
+		if res:
+			result = db.selectQuery(res)
+			if result:
+				return result
+		else:
+			break
+
+	# x축 감소
+	for i in range(10, 100, 10):
+		if startX-i<0 :
+			break
+		img = cv2.pyrUp(image[startY+i//50:endY+i//50, startX-i: endX])
+		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 3, 5)
+		text = pt.image_to_string(gray, config='--psm 6', lang='kor')
+		res = stringProcess(text)
+		if res == 'maybe':
+			continue
+		if res:
+			result = db.selectQuery(res)
+			if result:
+				return result
+		else:
+			break
+	# 4방향 동시 증가
+	for i in range(10, 100, 10):
+		img = cv2.pyrUp(image[max(int(startY - i//30), 0):min(int(endY + i//30), H), max(startX - i, 0):min(endX+i,W)])
+		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		text = pt.image_to_string(gray, config='--psm 6', lang='kor')
+		res = stringProcess(text)
+		if res == 'maybe':
+			continue
+		if res:
+			result = db.selectQuery(res)
+			if result:
+				return result
+		else:
+			break
+	return None
+
+def text_detect(image, net, layerNames):
 	(H, W) = image.shape[:2]
-
-	layerNames = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
-	print("[INFO] loading EAST text detector...")
-	net = cv2.dnn.readNet('frozen_east_text_detection.pb')
-
 	blob = cv2.dnn.blobFromImage(image, 1.0, (W, H),(123.68, 116.78, 103.94), swapRB=True, crop=False)
 
 	start = time.time()
@@ -38,13 +110,9 @@ def text_detect(image):
 
 	print("[INFO] text detection took {:.6f} seconds".format(end - start))
 
-	# grab the number of rows and columns from the scores volume, then
-	# initialize our set of bounding box rectangles and corresponding
-	# confidence scores
 	(numRows, numCols) = scores.shape[2:4]
 	rects = []
 	confidences = []
-
 	# loop over the number of rows
 	for y in range(0, numRows):
 		# extract the scores (probabilities), followed by the geometrical
@@ -57,7 +125,6 @@ def text_detect(image):
 		xData3 = geometry[0, 3, y]
 		anglesData = geometry[0, 4, y]
 
-		# loop over the number of columns
 		for x in range(0, numCols):
 			# if our score does not have sufficient probability, ignore it
 			# min_confidence default 0.5
@@ -88,78 +155,23 @@ def text_detect(image):
 
 			# add the bounding box coordinates and probability score to
 			# our respective lists
+			if (endX - startX) < 40:
+				continue
 			rects.append((startX, startY, endX, endY))
 			confidences.append(scoresData[x])
 
-	# apply non-maxima suppression to suppress weak, overlapping bounding
-	# boxes
 	boxes = non_max_suppression(np.array(rects), probs=confidences)
 	ret = {'drugs': []}
-	# loop over the bounding boxes
-	for (startX, startY, endX, endY) in tqdm(boxes):
-		# scale the bounding box coordinates based on the respective
-		# ratios
-		if (startX-5) >= 0:
-			startX-=5
-		else:
-			startX = 0
-		if (startY-5)>=0:
-			startY-=5
-		else:
-			startY=0
-		if (endX+5) < W:
-			endX+=5
-		else:
-			endX = W
-		if (endY+10) < H:
-			endY+=10
-		else:
-			endY=H
-		# draw the bounding box on the image
-		img = image[startY:endY, startX:endX]
-		img = cv2.pyrUp(img)
-		text = pt.image_to_string(img, config='--psm 6', lang='kor')
-		res = stringProcess(text)
-		if res != 'not' and res != 'maybe':
-			result = db.selectQuery(res)
-			print(res)
-			if result:
-				ret['drugs'].append(result[0])
-				cv2.rectangle(image, (startX, startY), (endX, endY), (0, 255, 0), 2)
-			else:
-				cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 2)
-		else:
-			if res == 'not':
-				continue
-			for i in range(60,5):
-				text = pt.image_to_string(cv2.pyrUp(image[startY:endY, startX:endX +i]), config='--psm 6', lang='kor')
-				res = stringProcess(text)
-				if res != 'not' and res != 'maybe':
-					break
 
-			if res != 'not' and res != 'maybe':
-				result = db.selectQuery(res)
-				print(res)
-				if result:
-					cv2.rectangle(image, (startX, startY), (endX, endY), (0, 255, 0), 2)
-					ret['drugs'].append(result[0])
-				else:
-					cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 2)
-			else:
-				for i in range(15, 5):
-					text = pt.image_to_string(cv2.pyrUp(image[startY:endY+i, startX:endX]), config='--psm 6', lang='kor')
-					res = stringProcess(text)
-					if res != 'not' and res != 'maybe':
-						break
-				if res != 'not' and res != 'maybe':
-					result = db.selectQuery(res)
-					print(res)
-					if result:
-						cv2.rectangle(image, (startX, startY), (endX, endY), (0, 255, 0), 2)
-						ret['drugs'].append(result[0])
-					else:
-						cv2.rectangle(image, (startX, startY), (endX, endY), (255, 0, 0), 2)
-	cv2.imwrite('result.jpg', image)
+	for (startX, startY, endX, endY) in tqdm(boxes):
+		try:
+			res = text_roi_extension(image, startX, endX, startY, endY, W, H)
+			if res:
+				ret['drugs'].append(res[0])
+			# draw the bounding box on the image
+		except Exception as ex:
+			print('error report : ' , ex)
+
 	return ret
 
 if __name__ == '__main__' :
