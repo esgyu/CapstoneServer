@@ -7,13 +7,14 @@ import dialogflow_v2 as dialogflow
 
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'medivice-lldwrl-515b16d8293e.json'
 
+
 def detect_intent_texts(texts, user_name):
     session_client = dialogflow.SessionsClient()
     session = session_client.session_path('medivice-lldwrl', user_name)
 
     text_input = dialogflow.types.TextInput(text=texts, language_code='ko')
     query_input = dialogflow.types.QueryInput(text=text_input)
-    response = session_client.detect_intent( session=session, query_input=query_input )
+    response = session_client.detect_intent(session=session, query_input=query_input)
 
     answer = response.query_result.fulfillment_text
 
@@ -66,12 +67,12 @@ def get_answer(text, user_key):
         time = re.compile('.*\d\d:\d\d:\d\d.*')
 
         m = date.match(answer)
-        if m!=None:
-            answer = re.sub('\d\d\d\d-\d\d-\d\d\w','', answer)
+        if m:
+            answer = re.sub('\d\d\d\d-\d\d-\d\d\w', '', answer)
 
         m = time.match(answer)
-        if m!=None:
-            answer = re.sub(r'(\d{2}):(\d{2}):(\d{2})',r'\1시 \2분',answer)
+        if m:
+            answer = re.sub(r'(\d{2}):(\d{2}):(\d{2})', r'\1시 \2분', answer)
 
     except Exception as e:
         return '오류가 발생했습니다.'
