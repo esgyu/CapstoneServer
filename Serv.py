@@ -6,10 +6,12 @@ import os
 from flask import request
 import json
 import chat
-
+import cv2
 
 app = flask.Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
+print("[INFO] loading EAST text detector...")
+net = cv2.dnn.readNet('frozen_east_text_detection.pb')
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -36,7 +38,7 @@ def handle_request():
         timestr = time.strftime("%Y%m%d-%H%M%S")
         imagefile.save(timestr + '_' + filename)
         try:
-            ret = imp.image_warp(timestr + '_' + filename)
+            ret = imp.image_warp(timestr + '_' + filename, net)
         except Exception as ex:
             print('에러가 발생했습니다.', ex)
             return 'Image Processing Failed!'

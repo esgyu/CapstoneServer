@@ -133,12 +133,9 @@ def string_process(text):
     codes = re.findall('[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+', text)
     if codes:
         return codes
-    codes = re.findall('[0-9]+[0-9]+[0-9]+', text)
-    if codes:
-        return 'maybe'
     codes = re.findall('[0-9]+', text)
     if codes:
-        return 'maybe'
+        return codes
     return None
 
 
@@ -147,6 +144,8 @@ def extract_sub_info(res, sx, sy, ex, ey, img, code):
     image = img[sy:ey, sx:ex]
     (H, W) = image.shape[:2]
     if (H%32)!=0 or (W%32)!=0:
+        if H<32: H=32
+        if W<32 : W=32
         image = cv2.resize(image, ((W//32)*32, (H//32)*32))
     image = cv2.pyrUp(image)
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
@@ -155,11 +154,12 @@ def extract_sub_info(res, sx, sy, ex, ey, img, code):
     lab = cv2.merge(lab_planes)
     image = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    res = pt.image_to_string(gray, config='--psm 6', lang='kor')
-    texts = res.split('\n')
-    for text in texts:
-        print(text , '끝')
-    print_img(gray)
+    res = pt.image_to_string(gray, config='--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789 cmlg')
+    print(res)
+    #texts = res.split('\n')
+    #for text in texts:
+        #print(text , '끝')
+    #print_img(gray)
 
 
 def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H):
@@ -179,19 +179,17 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H):
     img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    text = pt.image_to_string(gray, config='--psm 6', lang='kor')
+    text = pt.image_to_string(gray, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
     res = string_process(text)
-
-    if not res:
-        return None
-    result = db.selectQuery(res)
-    if result:
-        (sx, sy), (ex, ey) = (_startX, _startY), (_W, _endY)
-        extract_sub_info(result, sx, sy, ex, ey, image, result[0]['code'])
-        return result
+    if res:
+        result = db.selectQuery(res)
+        if result:
+            (sx, sy), (ex, ey) = (_startX, _startY), (_W, _endY)
+            extract_sub_info(result, sx, sy, ex, ey, image, result[0]['code'])
+            return result
 
     # x축 증가
-    for i in range(10, 60, 10):
+    for i in range(5, 40, 5):
         if _endX + i >= _W:
             break
         img = cv2.pyrUp(image[_startY - (i // 50):_endY + (i // 50), _startX:_endX + i])
@@ -204,24 +202,24 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        text = pt.image_to_string(gray, config='--psm 6', lang='kor')
-        #print_img(gray)
-        print(text)
+        text = pt.image_to_string(gray, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+        # print_img(gray)
+        # print(text)
         res = string_process(text)
         if res:
             result = db.selectQuery(res)
             if result:
-                (sx, sy), (ex, ey) = (_startX, _startY - (i // 50)), (_W, _endY + (i // 50))
+                (sx, sy), (ex, ey) = (_startX, _startY - (i // 10)), (_W, _endY + (i // 10))
                 extract_sub_info(result, sx, sy, ex, ey, image, result[0]['code'])
                 return result
         else:
             break
 
     # x축 감소
-    for i in range(10, 60, 10):
+    for i in range(5, 40, 5):
         if _startX - i < 0:
             break
-        img = cv2.pyrUp(image[_startY - (i // 50):_endY + (i // 50), _startX - i: _endX])
+        img = cv2.pyrUp(image[_startY - (i // 10):_endY + (i // 10), _startX - i: _endX])
 
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
         lab_planes = cv2.split(lab)
@@ -231,22 +229,23 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        text = pt.image_to_string(gray, config='--psm 6', lang='kor')
-        #print_img(gray)
-        print(text)
+        text = pt.image_to_string(gray, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+        # print_img(gray)
+        # print(text)
         res = string_process(text)
         if res:
             result = db.selectQuery(res)
             if result:
-                (sx, sy), (ex, ey) = (_startX-i, _startY - (i // 50)), (_W, _endY + (i // 50))
+                (sx, sy), (ex, ey) = (_startX-i, _startY - (i // 10)), (_W, _endY + (i // 10))
                 extract_sub_info(result, sx, sy, ex, ey, image, result[0]['code'])
                 return result
         else:
             break
+
     # 4방향 동시 증가
-    for i in range(10, 60, 10):
+    for i in range(5, 20, 5):
         img = cv2.pyrUp(
-            image[max(int(_startY - i // 2), 0):min(int(_endY + i // 2), _H), max(_startX - i, 0):min(_endX + i, _W)])
+            image[max(int(_startY - i //3), 0):min(int(_endY + i // 3), _H), max(_startX - i, 0):min(_endX + i, _W)])
 
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
         lab_planes = cv2.split(lab)
@@ -256,39 +255,14 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        text = pt.image_to_string(gray, config='--psm 6', lang='kor')
-        #print_img(gray)
-        print(text)
+        text = pt.image_to_string(gray, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+        # print_img(gray)
+        # print(text)
         res = string_process(text)
         if res:
             result = db.selectQuery(res)
             if result:
-                (sx, sy), (ex, ey) = (max(_startX-i, 0), max(int(_startY - i // 2), 0)), (_W, min(int(_endY + i // 2), _H))
-                extract_sub_info(result, sx, sy, ex, ey, image, result[0]['code'])
-                return result
-        else:
-            break
-
-    # 4방향 동시 감소
-    for i in range(1, 10):
-        img = cv2.pyrUp(image[(_startY + i):(_endY - i), (_startX+i):(_endX - i)])
-
-        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        lab_planes = cv2.split(lab)
-        lab_planes[0] = clahe.apply(lab_planes[0])
-        lab = cv2.merge(lab_planes)
-        img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        text = pt.image_to_string(gray, config='--psm 6', lang='kor')
-        #print_img(gray)
-        print(text)
-        res = string_process(text)
-        if res:
-            result = db.selectQuery(res)
-            if result:
-                (sx, sy), (ex, ey) = (_startX+i, (_startY + i)), (_W, (_endY - i), img)
+                (sx, sy), (ex, ey) = (max(_startX-i, 0), max(int(_startY - i // 3), 0)), (_W, min(int(_endY + i // 3), _H))
                 extract_sub_info(result, sx, sy, ex, ey, image, result[0]['code'])
                 return result
         else:
@@ -296,10 +270,8 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H):
     return None
 
 
-def find_roi(image, min, max):
+def find_roi(image, min_thresh, max_thresh, net):
     layerNames = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
-    print("[INFO] loading EAST text detector...")
-    net = cv2.dnn.readNet('frozen_east_text_detection.pb')
 
     (H, W) = image.shape[:2]
     blob = cv2.dnn.blobFromImage(image, 1.0, (W, H), (123.68, 116.78, 103.94), swapRB=True, crop=False)
@@ -354,7 +326,7 @@ def find_roi(image, min, max):
             startX = int(endX - w)
             startY = int(endY - h)
 
-            if (endX - startX) < min or (endX - startX) > max:
+            if (endX - startX) < min_thresh or (endX - startX) > max_thresh:
                 continue
             rects.append((startX, startY, endX, endY))
             confidences.append(scoresData[x])
@@ -362,9 +334,9 @@ def find_roi(image, min, max):
     return rects, confidences
 
 
-def text_detect(image):
+def text_detect(image, net):
     (H, W) = image.shape[:2]
-    rects, confidences = find_roi(image, 40, 400)
+    rects, confidences = find_roi(image, 40, 400, net)
     boxes = non_max_suppression(np.array(rects), probs=confidences)
     ret = {'drugs': []}
     origin = image.copy()
@@ -384,10 +356,6 @@ def text_detect(image):
 
 
 def hough_linep(img):
-    (H, W) = img.shape[:2]
-    if (H, W) > (1280, 960):
-        img = cv2.resize(img, (810, 1080))
-
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     lab_planes = cv2.split(lab)
@@ -428,24 +396,28 @@ def hough_linep(img):
     return img
 
 
-def image_warp(src_loc):
+def image_warp(src_loc, net):
     # 이미지 읽기
     img = cv2.imread(src_loc)
     print(img.shape)
     img, rot = image_resize(img)
     img = hough_linep(img)
+    print(img.shape)
     img = edge_detect(img)
+    print(img.shape)
     #print_img(img)
     if rot:
-        res = text_detect(img)
+        res = text_detect(img, net)
         if res:
             return res
         img = rotate_180deg(img)
-        return text_detect(img)
+        return text_detect(img, net)
 
     else:
-        return text_detect(img)
+        return text_detect(img, net)
 
 
 if __name__ == '__main__':
-    print(image_warp('20200602-173535_Android_Flask_.jpg'))
+    print("[INFO] loading EAST text detector...")
+    net = cv2.dnn.readNet('frozen_east_text_detection.pb')
+    print(image_warp('test7.jpg',net))
