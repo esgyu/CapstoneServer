@@ -92,7 +92,7 @@ def selectQuery(codename):
         charset='utf8'
     )
     cursor = drug_db.cursor(pymysql.cursors.DictCursor)
-    sql = """select code, drug_name, small_image, pack_image, usages, effect from drug_info
+    sql = """select * from drug_info
                         where code = %s
                 """
     cursor.execute(sql, (codename))

@@ -135,7 +135,7 @@ def text_detect(net, refine_net, image):
     # save score text
     filename = time.strftime("%Y%m%d-%H%M%S")
     mask_file = result_folder + "/res_" + filename + '_mask.jpg'
-    cv2.imwrite(mask_file, score_text)
+    #cv2.imwrite(mask_file, score_text)
 
     crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
 
