@@ -8,9 +8,9 @@ import db_connect as db
 import cv2
 import os
 import torch
-from CRAFTS import craft
-from CRAFTS import text_detector
-from CRAFTS import refinenet
+from crafts import craft
+from crafts import text_detector
+from crafts import refinenet
 from collections import OrderedDict
 from PIL import ImageEnhance, Image
 

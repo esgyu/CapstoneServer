@@ -10,9 +10,9 @@ import werkzeug
 from flask import request
 
 import chat
-from CRAFTS import craft
-from CRAFTS import text_detector
-from CRAFTS import refinenet
+from crafts import craft
+from crafts import text_detector
+from crafts import refinenet
 import image_proc as imp
 
 app = flask.Flask(__name__)
