@@ -1,6 +1,6 @@
 import pymysql
 import pandas as pd
-
+import re
 
 def connect_sql():
     drug_db = pymysql.connect(
@@ -13,7 +13,7 @@ def connect_sql():
 
     cursor = drug_db.cursor(pymysql.cursors.DictCursor)
 
-    files = pd.read_csv('hello2.csv')
+    files = pd.read_csv('dbdata/drug_info.csv')
 
     for i in range(files.shape[0]):
         sql = """insert into drug_info(code, drug_name, small_image, pack_image)
@@ -24,36 +24,6 @@ def connect_sql():
         small_image = str(files.iloc[i][10]) if not pd.isna(files.iloc[i][10]) else 'null'
         pack_image = str(files.iloc[i][11]) if not pd.isna(files.iloc[i][11]) else 'null'
         cursor.execute(sql, (code, drug_name, small_image, pack_image))
-    drug_db.commit()
-
-
-def update_sql():
-    drug_db = pymysql.connect(
-        user='root',
-        passwd='root',
-        host='127.0.0.1',
-        db='drug_information',
-        charset='utf8'
-    )
-
-    cursor = drug_db.cursor(pymysql.cursors.DictCursor)
-
-    files = pd.read_csv('hello2.csv')
-
-    attrs = [4, 5, 10, 11, 12, 13]
-    attr = ['제품코드', '업체명', 'small_이미지', 'pack_img', '용법,용량', '효능,효과']
-
-    cnt = 0
-    for i in range(files.shape[0]):
-        code = int(files.iloc[i][4])
-        usages = str(files.iloc[i][12])
-        effect = str(files.iloc[i][13])
-        # usage = usage.replace('\xa0','')
-        # effect = effect.replace('\xa0','')
-
-        sql = 'update drug_info set usages = "{}", effect = "{}" where code = {}'.format(usages, effect, code)
-        # print(sql)
-        cursor.execute(sql)
     drug_db.commit()
 
 
@@ -79,6 +49,37 @@ def update_sql_name():
     drug_db.commit()
 
 
+def update_sql_dose():
+    drug_db = pymysql.connect(
+        user='root',
+        passwd='root',
+        host='127.0.0.1',
+        db='drug_information',
+        charset='utf8'
+    )
+
+    cursor = drug_db.cursor(pymysql.cursors.DictCursor)
+    sql = 'select * from drug_info where usages LIKE "%일%회%"'
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    for row in rows:
+        code = row['code']
+        usages = row['usages']
+        dose_day = re.findall('1일\s+\d+회',usages)
+        dose_one = re.findall('1회\s+\d+\w+',usages)
+        daily_dose = 1
+        single_dose = 1
+        if dose_day:
+            daily_dose = re.sub(r'1일\s+([0-9]+)회', r'\1', dose_day[0])
+        if dose_one:
+            single_dose = re.sub(r'1회\s+([0-9]+)\w+',r'\1', dose_one[0])
+        sql = 'update drug_info set daily_dose = {}, single_dose ={} where code = {}'.\
+            format(daily_dose, single_dose, code)
+        cursor.execute(sql)
+
+    drug_db.commit()
+
+
 def selectQuery(codename):
     if codename == 'maybe':
         return None
@@ -98,28 +99,26 @@ def selectQuery(codename):
     rows = cursor.fetchall()
     return rows
 
+def save_name_code():
+    drug_db = pymysql.connect(
+        user='root',
+        passwd='root',
+        host='127.0.0.1',
+        db='drug_information',
+        charset='utf8'
+    )
 
-def count_maxlength():
-    files = pd.read_csv('drug_information.csv')
-    # 업체명 ? , small_이미지 ? , pack_img ?, 용법,용량 ?, 효능,효과 ?
-    length = [0, 0, 0, 0, 0]
-    index = [0, 0, 0, 0, 0]
-    attrs = [5, 10, 11, 12, 13]
-    attr = ['업체명', 'small_이미지', 'pack_img', '용법,용량', '효능,효과']
-
-    for i in range(files.shape[0]):
-        for j in range(5):
-            if (pd.isna(files.iloc[i][attrs[j]])):
-                continue
-            if length[j] < len(files.iloc[i][attrs[j]]):
-                length[j] = max(length[j], len(files.iloc[i][attrs[j]]))
-                index[j] = i
-    print(length)
-    for i in range(5):
-        print(files.iloc[index[i]][attrs[i]])
+    cursor = drug_db.cursor(pymysql.cursors.DictCursor)
+    sql = 'select * from drug_info'
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    data = pd.DataFrame(columns=['Code', 'Name'])
+    cnt=0
+    for row in rows:
+        data.loc[cnt] = [row['code'], row['drug_name']]
+        cnt+=1
+    data.to_csv('save.csv', encoding='utf-8-sig')
 
 
 if __name__ == "__main__":
-    list = [671803511, 642101970, 643900710, 645403740, 640900250, 644302570, 644306170]
-    for i in list:
-        print(selectQuery(i))
+    save_name_code()
