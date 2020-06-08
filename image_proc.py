@@ -13,7 +13,7 @@ from crafts import text_detector
 from crafts import refinenet
 from collections import OrderedDict
 from PIL import ImageEnhance, Image
-
+import glob
 
 def copyStateDict(state_dict):
     if list(state_dict.keys())[0].startswith("module"):
@@ -174,6 +174,7 @@ def string_process(text):
         return codes
     return None
 
+
 # CLAHE Histogram Equalization 진행 후 높이 2배 향상하여 반환
 def resize_apply_histo(image):
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
@@ -289,12 +290,12 @@ def find_roi(image, min_thresh, max_thresh, net):
     (H, W) = image.shape[:2]
     blob = cv2.dnn.blobFromImage(image, 1.0, (W, H), (123.68, 116.78, 103.94), swapRB=True, crop=False)
 
-    start = time.time()
+    #start = time.time()
     net.setInput(blob)
     (scores, geometry) = net.forward(layerNames)
-    end = time.time()
+    #end = time.time()
 
-    print("[INFO] text detection took {:.6f} seconds".format(end - start))
+    #print("[INFO] text detection took {:.6f} seconds".format(end - start))
 
     (numRows, numCols) = scores.shape[2:4]
     rects = []
@@ -368,6 +369,110 @@ def proc_dose(image, ret, mp, point):
         break
 
     if not single_dose_point:
+        (H, W) = image.shape[:2]
+        for obj in ret['drugs']:
+            code = obj['code']
+            if len(mp[code]) == 1:
+                x1 = mp[code][0][1][0][0]
+                if not single_dose_point:
+                    single_dose_point = x1
+                else:
+                    if abs(single_dose_point) < 20:
+                        continue
+                    if single_dose_point < x1:
+                        if not daily_dose_point:
+                            daily_dose_point = x1
+                        else:
+                            if abs(daily_dose_point - x1) < 20:
+                                continue
+                            else:
+                                if daily_dose_point < x1:
+                                    if not total_dose_point:
+                                        total_dose_point = x1
+                                else:
+                                    tmp = daily_dose_point
+                                    daily_dose_point = x1
+                                    x1 = tmp
+                                    if not total_dose_point:
+                                        total_dose_point = x1
+                    else:
+                        tmp = single_dose_point
+                        single_dose_point = x1
+                        x1 = tmp
+                        if not daily_dose_point:
+                            daily_dose_point = x1
+                        else:
+                            if abs(daily_dose_point - x1) < 20:
+                                continue
+                            else:
+                                if daily_dose_point < x1:
+                                    if not total_dose_point:
+                                        total_dose_point = x1
+                                else:
+                                    tmp = daily_dose_point
+                                    daily_dose_point = x1
+                                    x1 = tmp
+                                    if not total_dose_point:
+                                        total_dose_point = x1
+            elif len(mp[code]) == 2:
+                x1 = mp[code][0][1][0][0]
+                x2 = mp[code][1][1][0][0]
+                if not single_dose_point:
+                    single_dose_point = x1
+                    if not daily_dose_point:
+                        daily_dose_point = x2
+                    else:
+                        if (daily_dose_point - x2) < 20:
+                            continue
+                        else:
+                            if daily_dose_point < x2:
+                                if not total_dose_point:
+                                    total_dose_point = x2
+                            else:
+                                tmp = daily_dose_point
+                                daily_dose_point = x2
+                                x2 = tmp
+                                if not total_dose_point:
+                                    total_dose_point = x2
+                else:
+                    if abs(single_dose_point-x1) < 20:
+                        if not daily_dose_point:
+                            daily_dose_point = x2
+                        else:
+                            if abs(daily_dose_point-x2) < 20:
+                                continue
+                            if daily_dose_point < x2:
+                                if not total_dose_point:
+                                    total_dose_point = x2
+                            else:
+                                tmp = daily_dose_point
+                                daily_dose_point = x2
+                                x2 = tmp
+                                if not total_dose_point:
+                                    total_dose_point = x2
+                    else:
+                        if single_dose_point < x1:
+                            if not daily_dose_point:
+                                daily_dose_point = x2
+                                if not total_dose_point:
+                                    total_dose_point = x2
+                            else:
+                                if abs(x1-daily_dose_point) < 20:
+                                    if not total_dose_point:
+                                        total_dose_point = x2
+                        else:
+                            tmp = single_dose_point
+                            single_dose_point = x1
+                            x1 = tmp
+                            if not daily_dose_point:
+                                daily_dose_point = x1
+                                if not total_dose_point:
+                                    total_dose_point = x2
+                            else:
+                                if not total_dose_point:
+                                    total_dose_point = x2
+
+    if not single_dose_point or not daily_dose_point or not total_dose_point:
         return ret
 
     attrs = ['single_dose', 'daily_dose', 'total_dose']
@@ -404,7 +509,7 @@ def proc_dose(image, ret, mp, point):
                     texts = 1
             target = next((item for item in ret['drugs'] if item['code'] == code), None)
             target[attrs[cnt]] = texts
-            print(code, ' - ' , attrs[cnt], ' : ', texts)
+            #print(code, ' - ' , attrs[cnt], ' : ', texts)
     return ret
 
 
@@ -416,11 +521,7 @@ def text_detect(image, net, crafts, refine):
     mp = {}
     point = {}
 
-    # origin = image.copy()
-    # for (startX, startY, endX, endY) in boxes:
-    #     cv2.rectangle(origin, (startX, startY), (endX, endY), (0, 255, 0), 2)
-
-    for (startX, startY, endX, endY) in tqdm(boxes):
+    for (startX, startY, endX, endY) in boxes:
         try:
             res, tmp, pt = text_roi_extension(image, startX, endX, startY, endY, W, H, crafts, refine)
             if res and res[0]['code'] not in ret['drugs']:
@@ -432,10 +533,7 @@ def text_detect(image, net, crafts, refine):
         except Exception as ex:
             print('error report : ', ex)
 
-    # cv2.imwrite(os.path.join('image', 'result.jpg'), origin)
-
     ret = proc_dose(image, ret, mp, point)
-
     return ret
 
 
@@ -484,13 +582,13 @@ def hough_linep(img):
 def image_warp(src_loc, net, crafts, refine):
     # 이미지 읽기
     img = cv2.imread(src_loc)
-    print(img.shape)
     img, rot = image_resize(img)
     img = hough_linep(img)
-    print(img.shape)
     img = edge_detect(img)
+    (H, W) = img.shape[:2]
+    if H > 1920 and W > 1440:
+        img = cv2.resize(img, (1440, 1920))
     print(img.shape)
-
     if rot:
         res = text_detect(img, net, crafts, refine)
         if res:
@@ -502,8 +600,56 @@ def image_warp(src_loc, net, crafts, refine):
         return text_detect(img, net, crafts, refine)
 
 
+def process(net, crafts, refine):
+    files = glob.glob('image/test/*.jpg')
+    cnt = 0
+    codecnt = 0
+    singlecnt = 0
+    dailycnt = 0
+    totalcnt = 0
+    total_document = 0
+    for file in tqdm(files):
+        lists = re.findall(r'\[[0-9].*[0-9]\]', file)
+        objs = lists[0].split('],')
+        result = {'drugs': []}
+        for obj in objs:
+            obj = obj.replace('[', '')
+            obj = obj.replace(']', '')
+            obj = obj.replace(' ', '')
+            info = obj.split(',')
+            medi = {'code': info[0], 'single_dose': info[1], 'daily_dose': info[2], 'total_dose': info[3]}
+            result['drugs'].append(medi)
+        try:
+            ret = image_warp(file, net, crafts, refine)
+        except Exception as e:
+            print('error report :', e)
+            continue
+        total_document += 1
+        cnt += len(result['drugs'])
+        for obj in ret['drugs']:
+            code = str(obj['code'])
+            single = str(int(float(obj['single_dose'])))
+            daily = str(obj['daily_dose'])
+            total = str(obj['total_dose'])
+            target = next((item for item in result['drugs'] if item['code'] == code), None)
+            if not target: continue
+            codecnt += 1
+            if target['single_dose'] == single:
+                singlecnt += 1
+            if target['daily_dose'] == daily:
+                dailycnt += 1
+            if target['total_dose'] == total:
+                totalcnt += 1
+
+    print(cnt, codecnt, singlecnt, dailycnt, totalcnt)
+    print('Total Processed Document : ', total_document)
+    print('Code Accuracy :', (codecnt / cnt) * 100)
+    print('Single Dose Accuracy :', (singlecnt / cnt) * 100)
+    print('Daily Dose Accuracy :', (dailycnt / cnt) * 100)
+    print('Total Dose Accuracy :', (totalcnt / cnt) * 100)
+
 if __name__ == '__main__':
     print("[INFO] loading EAST text detector...")
     net = cv2.dnn.readNet('frozen_east_text_detection.pb')
     crafts, refine = load_craft()
-    print(image_warp('image/KakaoTalk_20200607_222456343_04.jpg', net, crafts, refine))
+    process(net, crafts, refine)

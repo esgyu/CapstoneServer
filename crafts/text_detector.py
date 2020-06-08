@@ -118,28 +118,19 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
 
 
 def text_detect(net, refine_net, image):
-    t = time.time()
-
-    #print("Test image {:d}/{:d}: {:s}".format(1, len(image_list), image_path), end='\r')
-    #image = CRAFTS.imgproc.loadImage(image_path)
-
-    # image, rot = ip.image_resize(image)
-    # image = ip.hough_linep(image)
-    # print(image.shape)
-    # image = ip.edge_detect(image)
-    # print(image.shape)
+    #t = time.time()
 
     boxes, polys, score_text = test_net(net, image, args.text_threshold, args.link_threshold, args.low_text,
                                          args.cuda, args.poly, refine_net)
 
     # save score text
-    filename = time.strftime("%Y%m%d-%H%M%S")
-    mask_file = result_folder + "/res_" + filename + '_mask.jpg'
+    #filename = time.strftime("%Y%m%d-%H%M%S")
+    #mask_file = result_folder + "/res_" + filename + '_mask.jpg'
     #cv2.imwrite(mask_file, score_text)
 
-    crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
+    #crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
 
-    print("elapsed time : {}s".format(time.time() - t))
+    #print("elapsed time : {}s".format(time.time() - t))
 
     return boxes
 
