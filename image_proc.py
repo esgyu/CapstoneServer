@@ -288,6 +288,7 @@ def find_roi(image, min_thresh, max_thresh, net):
     layerNames = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
 
     (H, W) = image.shape[:2]
+    print(H, W)
     blob = cv2.dnn.blobFromImage(image, 1.0, (W, H), (123.68, 116.78, 103.94), swapRB=True, crop=False)
 
     #start = time.time()
@@ -520,7 +521,9 @@ def text_detect(image, net, crafts, refine):
     ret = {'drugs': []}
     mp = {}
     point = {}
-
+    origin = image.copy()
+    for (startX, startY, endX, endY) in boxes:
+        cv2.rectangle(origin, (startX, startY), (endX, endY), (0,255,0), 2)
     for (startX, startY, endX, endY) in boxes:
         try:
             res, tmp, pt = text_roi_extension(image, startX, endX, startY, endY, W, H, crafts, refine)
@@ -532,8 +535,10 @@ def text_detect(image, net, crafts, refine):
         # draw the bounding box on the image
         except Exception as ex:
             print('error report : ', ex)
-
+    cv2.imwrite('result.jpg', origin)
     ret = proc_dose(image, ret, mp, point)
+    if not ret:
+        del image
     return ret
 
 
@@ -578,6 +583,8 @@ def hough_linep(img):
                 return rotate_theta_deg(img, thetas)
     return img
 
+height = [320, 640, 1024, 2048, 4096, 8192, 4096, 4544]
+width = [320, 640, 1024, 2048, 4096, 4096, 30240, 30272]
 
 def image_warp(src_loc, net, crafts, refine):
     # 이미지 읽기
@@ -585,10 +592,6 @@ def image_warp(src_loc, net, crafts, refine):
     img, rot = image_resize(img)
     img = hough_linep(img)
     img = edge_detect(img)
-    (H, W) = img.shape[:2]
-    if H > 1920 and W > 1440:
-        img = cv2.resize(img, (1440, 1920))
-    print(img.shape)
     if rot:
         res = text_detect(img, net, crafts, refine)
         if res:
