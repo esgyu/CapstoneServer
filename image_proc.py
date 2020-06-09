@@ -50,7 +50,7 @@ def print_img(img):
 def image_resize(img):
     height, width = img.shape[:2]
     rot = False
-    if width * 3 == height * 4:
+    if width * 3 == height * 4 or height*16 == width*9:
         (h, w) = img.shape[:2]
         (cX, cY) = (w // 2, h // 2)
         M = cv2.getRotationMatrix2D((cX, cY), 270, 1.0)
@@ -195,8 +195,24 @@ def extract_sub_info(sx, sy, ex, ey, img, crafts, refine):
         if W < 32: W = 32
         image = cv2.resize(image, ((W // 32) * 32, (H // 32) * 32))
     image = cv2.pyrUp(image)
-    gray = resize_apply_histo(image)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    lab_planes = cv2.split(lab)
+    lab_planes[0] = clahe.apply(lab_planes[0])
+    lab = cv2.merge(lab_planes)
+    gray = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    gray = cv2.cvtColor(gray, cv2.COLOR_BGR2RGB)
+    gray = Image.fromarray(gray)
+    gray = gray.convert("RGB")
+    gray = ImageEnhance.Contrast(gray).enhance(3)
+    gray = np.array(gray)
+    gray = cv2.cvtColor(gray, cv2.COLOR_RGB2BGR)
+    # text = pt.image_to_string(gray, config='--psm 6 --oem 3' , lang='kor')
+    # print(text)
+    # print_img(gray)
     boxes = text_detector.text_detect(crafts, refine, gray)
+
+
     mp = {}
     for box in boxes:
         mp[box[0][0]] = box
@@ -231,12 +247,11 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H, _crafts, _
         result = db.selectQuery(res)
         if result:
             (sx, sy), (ex, ey) = (_endX, _startY), (_W, _endY)
-            #result = extract_sub_info(result, sx, sy, ex, ey, image, crafts, refine)
             mp = extract_sub_info(sx, sy, ex, ey, image, _crafts, _refine)
             return result, mp, ((sx, sy), (ex, ey))
 
     # x축 증가
-    for i in range(5, 40, 5):
+    for i in range(10, 50, 10):
         if _endX + i >= _W:
             break
         gray = text_roi_extension_proc(image, _startY - (i // 50), _endY + (i // 50), _startX, _endX + i)
@@ -252,7 +267,7 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H, _crafts, _
             break
 
     # x축 감소
-    for i in range(5, 40, 5):
+    for i in range(10, 50, 10):
         if _startX - i < 0:
             break
         gray = text_roi_extension_proc(image, _startY - (i // 10), _endY + (i // 10), _startX - i, _endX)
@@ -268,7 +283,7 @@ def text_roi_extension(image, _startX, _endX, _startY, _endY, _W, _H, _crafts, _
             break
 
     # 4방향 동시 증가
-    for i in range(5, 20, 5):
+    for i in range(10, 30, 10):
         gray = text_roi_extension_proc(image, max(int(_startY - i // 3), 0), min(int(_endY + i // 3), _H),
                                         max(_startX - i, 0), min(_endX + i, _W))
         text = pt.image_to_string(gray, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
@@ -288,7 +303,6 @@ def find_roi(image, min_thresh, max_thresh, net):
     layerNames = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
 
     (H, W) = image.shape[:2]
-    print(H, W)
     blob = cv2.dnn.blobFromImage(image, 1.0, (W, H), (123.68, 116.78, 103.94), swapRB=True, crop=False)
 
     #start = time.time()
@@ -504,9 +518,11 @@ def proc_dose(image, ret, mp, point):
             try:
                 texts = int(texts)
             except Exception as e:
+                print('error in dose proc', e)
                 try:
                     texts = float(texts)
                 except Exception as e2:
+                    print('error 2 in dose proc', e2)
                     texts = 1
             target = next((item for item in ret['drugs'] if item['code'] == code), None)
             target[attrs[cnt]] = texts
@@ -524,7 +540,7 @@ def text_detect(image, net, crafts, refine):
     origin = image.copy()
     for (startX, startY, endX, endY) in boxes:
         cv2.rectangle(origin, (startX, startY), (endX, endY), (0,255,0), 2)
-    for (startX, startY, endX, endY) in boxes:
+    for (startX, startY, endX, endY) in tqdm(boxes):
         try:
             res, tmp, pt = text_roi_extension(image, startX, endX, startY, endY, W, H, crafts, refine)
             if res and res[0]['code'] not in ret['drugs']:
@@ -583,8 +599,6 @@ def hough_linep(img):
                 return rotate_theta_deg(img, thetas)
     return img
 
-height = [320, 640, 1024, 2048, 4096, 8192, 4096, 4544]
-width = [320, 640, 1024, 2048, 4096, 4096, 30240, 30272]
 
 def image_warp(src_loc, net, crafts, refine):
     # 이미지 읽기
@@ -655,4 +669,5 @@ if __name__ == '__main__':
     print("[INFO] loading EAST text detector...")
     net = cv2.dnn.readNet('frozen_east_text_detection.pb')
     crafts, refine = load_craft()
-    process(net, crafts, refine)
+    image_warp('image/Android_Flask_.jpg_20200608-210416.jpg', net, crafts, refine)
+    #process(net, crafts, refine)

@@ -81,9 +81,6 @@ def update_sql_dose():
 
 
 def selectQuery(codename):
-    if codename == 'maybe':
-        return None
-
     drug_db = pymysql.connect(
         user='root',
         passwd='root',

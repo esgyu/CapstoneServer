@@ -1,70 +1,25 @@
-import cv2
 import numpy as np
 import pytesseract as pt
-from pytesseract import Output
 import re
+from tqdm import tqdm
 import db_connect as db
+import cv2
+from PIL import ImageEnhance, Image
+import glob
 
 
-def image_warp(src_loc):
-    # 이미지 읽기
-    img = cv2.imread(src_loc)
-
-    img = image_resize(img)
-
-    result = edge_detect(img)
-
-    # Histogram Equlization
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    result = clahe.apply(result)
-
-    # Binary Image Elimination
-    C = 5
-    blk_size = 9
-    result = cv2.adaptiveThreshold(result, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, blk_size, C)
-
-    # LPF
-    result = cv2.bilateralFilter(result, 9, 75, 75)
-    result = line_elimination(result)
-    printimg(cv2.cvtColor(result,cv2.COLOR_GRAY2BGR))
-
-    text = pt.image_to_string(result, config='--psm 6', lang='kor')
-
-    print("================ OCR result ================")
-    d = pt.image_to_data(result, output_type=Output.DICT)
-    n_boxes = len(d['level'])
-    for i in range(n_boxes):
-        (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
-        cv2.rectangle(result, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    return stringProcess(text)
-
-
-def stringProcess(text):
-    # 9글자로 이루어진 의약품 코드 추출
-    codes = re.findall('[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+', text)
-    ret = {'drugs': []}
-    for code in codes:
-        result = db.selectQuery(code)
-        print(code)
-        if result:
-            ret['drugs'].append(result[0])
-            print(result)
-        else:
-            print("Fail!")
-    print(ret)
-    return ret
-
-
-def printimg(img):
+def print_img(img):
     cv2.imshow('aaa', img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
+# 이미지 Resizing 및 1920*1440 이상 이미지를 1920*1440으로, 그 외의 경우는 높이/너비를 32배수로 맞춤
+# 높이-너비 비율이 4:3이 아닌경우 시계방향 90도 회전
 def image_resize(img):
     height, width = img.shape[:2]
-
-    if width * 4 != height * 3 and width * 1.2 > height:
+    rot = False
+    if width * 3 == height * 4 or height*16 == width*9:
         (h, w) = img.shape[:2]
         (cX, cY) = (w // 2, h // 2)
         M = cv2.getRotationMatrix2D((cX, cY), 270, 1.0)
@@ -75,109 +30,212 @@ def image_resize(img):
         M[0, 2] += (nW / 2) - cX
         M[1, 2] += (nH / 2) - cY
         img = cv2.warpAffine(img, M, (nW, nH))
+        rot = True
+    return img, rot
 
-    if height > 2560 and width > 1920:
-        img = cv2.resize(img, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
 
+# 이미지가 시계방향으로 90도 돌아가서 전송되는 경우 재회전
+def rotate_180deg(img):
+    (h, w) = img.shape[:2]
+    (cX, cY) = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D((cX, cY), 270, 1.0)
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+    nW = int((h * sin) + (w * cos))
+    nH = int((h * cos) + (w * sin))
+    M[0, 2] += (nW / 2) - cX
+    M[1, 2] += (nH / 2) - cY
+    img = cv2.warpAffine(img, M, (nW, nH))
     return img
 
 
-def edge_detect(img):
-    draw = img.copy()
-    # 그레이스 스케일 변환 및 케니 엣지
+# HoughLine으로 검출된 수평선의 각도에 따라 수평을 맞추기 위해 원하는 만큼 회전
+def rotate_theta_deg(img, theta):
+    (h, w) = img.shape[:2]
+    (cX, cY) = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D((cX, cY), theta, 1.0)
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+    nW = int((h * sin) + (w * cos))
+    nH = int((h * cos) + (w * sin))
+    M[0, 2] += (nW / 2) - cX
+    M[1, 2] += (nH / 2) - cY
+    img = cv2.warpAffine(img, M, (nW, nH))
+    return img
+
+
+# 정규표현식을 통해 9글자 코드를 추출, 숫자가 한글자도 없는 경우 약물 코드로 판단하지 않음
+def string_process(text):
+    codes = re.findall('[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+[0-9]+', text)
+    if codes:
+        return codes
+    return None
+
+
+def hough_linep(img):
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    lab_planes = cv2.split(lab)
+    lab_planes[0] = clahe.apply(lab_planes[0])
+    lab = cv2.merge(lab_planes)
+    img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)  # 가우시안 블러로 노이즈 제거
-    iswarp = False
-    try:
-        edged = cv2.Canny(gray, 75, 200)  # 케니 엣지로 경계 검출
-        # printimg('Gray Scale & Canny Edge', edged)
-        # 컨투어 찾기
-        (cnts, _) = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # 모든 컨투어 그리기
-        # cv2.drawContours(draw, cnts, -1, (0,255,0))
-        # printimg('Draw Contour', draw)
-        # 컨투어들 중에 영역 크기 순으로 정렬
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
 
-        cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
-        for c in cnts:
-            # 영역이 가장 큰 컨투어 부터 근사 컨투어 단순화
-            peri = cv2.arcLength(c, True)  # 둘레 길이
-            # 둘레 길이의 0.02 근사값으로 근사화
-            vertices = cv2.approxPolyDP(c, 0.02 * peri, True)
-            if len(vertices) == 4:  # 근사한 꼭지점이 4개면 중지
-                break
-        pts = vertices.reshape(4, 2)  # N x 1 x 2 배열을 4 x 2크기로 조정
-        # for x,y in pts:
-        #     cv2.circle(draw, (x,y), 10, (0,255,0), -1) # 좌표에 초록색 동그라미 표시
+    for thresh in range(600, 200, -50):
+        lines = cv2.HoughLines(edges, 1, np.pi / 180, thresh)
+        if lines is None: continue
+        for line in lines:
+            rho, theta = line[0]
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            x1 = int(x0 + 1000 * (-b))
+            y1 = int(y0 + 1000 * a)
+            x2 = int(x0 - 1000 * (-b))
+            y2 = int(y0 - 1000 * a)
 
-        # printimg('4 Points', draw)
-        # 좌표 4개 중 상하좌우 찾기 ---②
-        sm = pts.sum(axis=1)  # 4쌍의 좌표 각각 x+y 계산
-        diff = np.diff(pts, axis=1)  # 4쌍의 좌표 각각 x-y 계산
+            distdiag = np.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2))
+            distx = abs(x1 - x2)
 
-        topLeft = pts[np.argmin(sm)]  # x+y가 가장 값이 좌상단 좌표
-        bottomRight = pts[np.argmax(sm)]  # x+y가 가장 큰 값이 좌상단 좌표
-        topRight = pts[np.argmin(diff)]  # x-y가 가장 작은 것이 우상단 좌표
-        bottomLeft = pts[np.argmax(diff)]  # x-y가 가장 큰 값이 좌하단 좌표
+            thetas = np.rad2deg(np.arccos(distx / distdiag))
+            if thetas > 30:
+                continue
 
-        # 변환 전 4개 좌표
-        pts1 = np.float32([topLeft, topRight, bottomRight, bottomLeft])
+            if y1 > y2:
+                thetas *= -1
 
-        # 변환 후 영상에 사용할 서류의 폭과 높이 계산 ---③
-        w1 = abs(bottomRight[0] - bottomLeft[0])  # 상단 좌우 좌표간의 거리
-        w2 = abs(topRight[0] - topLeft[0])  # 하당 좌우 좌표간의 거리
-        h1 = abs(topRight[1] - bottomRight[1])  # 우측 상하 좌표간의 거리
-        h2 = abs(topLeft[1] - bottomLeft[1])  # 좌측 상하 좌표간의 거리
-        width = max([w1, w2])  # 두 좌우 거리간의 최대값이 서류의 폭
-        height = max([h1, h2])  # 두 상하 거리간의 최대값이 서류의 높이
-
-        # 검출 좌표 길이가 200 * 200 미만이면 원본이미지를 Gray Scaling함
-        if width > 200 and height > 200:
-            # 변환 후 4개 좌표
-            pts2 = np.float32([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
-            # 변환 행렬 계산
-            mtrx = cv2.getPerspectiveTransform(pts1, pts2)
-            # 원근 변환 적용
-            result = cv2.warpPerspective(img, mtrx, (width, height))
-            iswarp = True
-        else:
-            result = gray
-    except Exception:
-        result = gray
-
-    if iswarp:
-        result = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
-    return result
+            if abs(thetas) < 1:
+                return img
+            else:
+                return rotate_theta_deg(img, thetas)
+    return img
 
 
-def line_elimination(image):
-    # Line Elimination
-    temp = image
-    temp = cv2.bitwise_not(temp)
-    th2 = cv2.adaptiveThreshold(temp, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -2)
+def image_contrast(img):
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    lab_planes = cv2.split(lab)
+    lab_planes[0] = clahe.apply(lab_planes[0])
+    lab = cv2.merge(lab_planes)
+    gray = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    gray = cv2.cvtColor(gray, cv2.COLOR_BGR2RGB)
+    gray = Image.fromarray(gray)
+    gray = gray.convert("RGB")
+    gray = ImageEnhance.Contrast(gray).enhance(3)
+    gray = np.array(gray)
+    gray = cv2.cvtColor(gray, cv2.COLOR_RGB2BGR)
+    return gray
 
-    horizontal = th2
-    vertical = th2
-    rows, cols = horizontal.shape
 
-    horizontalsize = int(cols / 30)
-    horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontalsize, 1))
-    horizontal = cv2.erode(horizontal, horizontalStructure, (-1, -1))
-    horizontal = cv2.dilate(horizontal, horizontalStructure, (-1, -1))
+def image_warp(src_loc):
+    # 이미지 읽기
+    img = cv2.imread(src_loc)
+    img, rot = image_resize(img)
+    img = hough_linep(img)
+    ret = {'drugs': []}
+    if rot:
+        gray = image_contrast(img)
+        text = pt.image_to_string(gray, config = '--psm 6 --oem 3 -c preserve_interword_spaces=1')
+        texts = text.split('\n')
+        for line in texts:
+            print('proc :', line)
+            code = string_process(line)
+            if not code: continue
+            try:
+                drug = db.selectQuery(code)
+                if drug:
+                    contain = line.split(' ')
+                    print(contain)
+                    ret['drugs'].append(drug)
+            except Exception as e:
+                continue
 
-    verticalsize = int(rows / 30)
-    verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, verticalsize))
-    vertical = cv2.erode(vertical, verticalStructure, (-1, -1))
-    vertical = cv2.dilate(vertical, verticalStructure, (-1, -1))
+        if not ret['drugs']:
+            img = rotate_180deg(img)
+            gray = image_contrast(img)
+            text = pt.image_to_string(gray, config='--psm 6 --oem 3 -c preserve_interword_spaces=1', lang='kor')
+            texts = text.split('\n')
+            for line in texts:
+                code = string_process(line)
+                if not code: continue
+                try:
+                    drug = db.selectQuery(code)
+                    if drug:
+                        contain = line.split(' ')
+                        print(contain)
+                        ret['drugs'].append(drug)
+                except Exception as e:
+                    continue
+    else:
+        gray = image_contrast(img)
+        text = pt.image_to_string(gray, config='--psm 6 --oem 3 -c preserve_interword_spaces=1', lang='kor')
+        texts = text.split('\n')
+        for line in texts:
+            print('proc :', line)
+            code = string_process(line)
+            if not code: continue
+            try:
+                drug = db.selectQuery(code)
+                if drug:
+                    contain = line.split(' ')
+                    print(contain)
+                    ret['drugs'].append(drug)
+            except Exception as e:
+                continue
+    return ret
 
-    sum = cv2.add(vertical, horizontal)
-    temp = cv2.absdiff(sum, temp)
+def process():
+    files = glob.glob('image/test/*.jpg')
+    cnt = 0
+    codecnt = 0
+    singlecnt = 0
+    dailycnt = 0
+    totalcnt = 0
+    total_document = 0
+    for file in tqdm(files):
+        lists = re.findall(r'\[[0-9].*[0-9]\]', file)
+        objs = lists[0].split('],')
+        result = {'drugs': []}
+        for obj in objs:
+            obj = obj.replace('[', '')
+            obj = obj.replace(']', '')
+            obj = obj.replace(' ', '')
+            info = obj.split(',')
+            medi = {'code': info[0], 'single_dose': info[1], 'daily_dose': info[2], 'total_dose': info[3]}
+            result['drugs'].append(medi)
+        try:
+            ret = image_warp(file)
+        except Exception as e:
+            print('error report :', e)
+            continue
+        total_document += 1
+        cnt += len(result['drugs'])
+        for obj in ret['drugs']:
+            code = str(obj['code'])
+            single = str(int(float(obj['single_dose'])))
+            daily = str(obj['daily_dose'])
+            total = str(obj['total_dose'])
+            target = next((item for item in result['drugs'] if item['code'] == code), None)
+            if not target: continue
+            codecnt += 1
+            if target['single_dose'] == single:
+                singlecnt += 1
+            if target['daily_dose'] == daily:
+                dailycnt += 1
+            if target['total_dose'] == total:
+                totalcnt += 1
 
-    temp = 255 - temp
-
-    temp = cv2.bilateralFilter(temp, 9, 75, 75)
-    return temp
+    print(cnt, codecnt, singlecnt, dailycnt, totalcnt)
+    print('Total Processed Document : ', total_document)
+    print('Code Accuracy :', (codecnt / cnt) * 100)
+    print('Single Dose Accuracy :', (singlecnt / cnt) * 100)
+    print('Daily Dose Accuracy :', (dailycnt / cnt) * 100)
+    print('Total Dose Accuracy :', (totalcnt / cnt) * 100)
 
 
 if __name__ == '__main__':
-    image_warp('image/test7.jpg')
+    files = glob.glob('image/temp/*.jpg')
+    for file in files:
+        image_warp(file)

@@ -39,9 +39,9 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='CRAFT Text Detection')
 parser.add_argument('--trained_model', default='weights/craft_mlt_25k.pth', type=str, help='pretrained model')
-parser.add_argument('--text_threshold', default=0.6, type=float, help='text confidence threshold')
-parser.add_argument('--low_text', default=0.3, type=float, help='text low-bound score')
-parser.add_argument('--link_threshold', default=0.1, type=float, help='link confidence threshold')
+parser.add_argument('--text_threshold', default=0.7, type=float, help='text confidence threshold')
+parser.add_argument('--low_text', default=0.4, type=float, help='text low-bound score')
+parser.add_argument('--link_threshold', default=0.4, type=float, help='link confidence threshold')
 parser.add_argument('--cuda', default=False, type=str2bool, help='Use cuda for inference')
 parser.add_argument('--canvas_size', default=1280, type=int, help='image size for inference')
 parser.add_argument('--mag_ratio', default=1.5, type=float, help='image magnification ratio')
@@ -118,19 +118,19 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
 
 
 def text_detect(net, refine_net, image):
-    #t = time.time()
+    t = time.time()
 
     boxes, polys, score_text = test_net(net, image, args.text_threshold, args.link_threshold, args.low_text,
                                          args.cuda, args.poly, refine_net)
 
     # save score text
-    #filename = time.strftime("%Y%m%d-%H%M%S")
-    #mask_file = result_folder + "/res_" + filename + '_mask.jpg'
-    #cv2.imwrite(mask_file, score_text)
-
-    #crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
-
-    #print("elapsed time : {}s".format(time.time() - t))
+    # filename = time.strftime("%Y%m%d-%H%M%S")
+    # mask_file = result_folder + "/res_" + filename + '_mask.jpg'
+    # cv2.imwrite(mask_file, score_text)
+    #
+    # crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
+    #
+    # print("elapsed time : {}s".format(time.time() - t))
 
     return boxes
 
