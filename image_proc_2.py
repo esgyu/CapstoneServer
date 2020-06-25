@@ -11,6 +11,7 @@ from crafts import refinenet
 from collections import OrderedDict
 from PIL import ImageEnhance, Image
 import glob
+import datetime as pydatetime
 from typing import Tuple, Union
 import math
 from deskew import determine_skew
@@ -28,46 +29,6 @@ def rotate(
     rot_mat[1, 2] += (width - old_width) / 2
     rot_mat[0, 2] += (height - old_height) / 2
     return cv2.warpAffine(image, rot_mat, (int(round(height)), int(round(width))), borderValue=background)
-
-
-def hough_linep(img):
-    img = histo_equlization(img)
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-
-    for thresh in range(600, 200, -50):
-        lines = cv2.HoughLines(edges, 1, np.pi / 180, thresh)
-        if lines is None: continue
-        for line in lines:
-            rho, theta = line[0]
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a * rho
-            y0 = b * rho
-            x1 = int(x0 + 1000 * (-b))
-            y1 = int(y0 + 1000 * a)
-            x2 = int(x0 - 1000 * (-b))
-            y2 = int(y0 - 1000 * a)
-
-            distdiag = np.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2))
-            distx = abs(x1 - x2)
-
-            thetas = np.rad2deg(np.arccos(distx / distdiag))
-            if thetas > 30 or thetas < 0.5:
-                continue
-
-            if y1 > y2:
-                thetas *= -1
-
-            (h, w) = img.shape[:2]
-            center = (w // 2, h // 2)
-            M = cv2.getRotationMatrix2D(center, thetas, 1.0)
-            img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-
-            return img
-    return img
 
 
 def copyStateDict(state_dict):
@@ -142,6 +103,46 @@ def string_process(text):
     return None
 
 
+def hough_linep(img):
+    img = histo_equlization(img)
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+
+    for thresh in range(600, 200, -50):
+        lines = cv2.HoughLines(edges, 1, np.pi / 180, thresh)
+        if lines is None: continue
+        for line in lines:
+            rho, theta = line[0]
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            x1 = int(x0 + 1000 * (-b))
+            y1 = int(y0 + 1000 * a)
+            x2 = int(x0 - 1000 * (-b))
+            y2 = int(y0 - 1000 * a)
+
+            distdiag = np.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2))
+            distx = abs(x1 - x2)
+
+            thetas = np.rad2deg(np.arccos(distx / distdiag))
+            if thetas > 30 or thetas < 0.5:
+                continue
+
+            if y1 > y2:
+                thetas *= -1
+
+            (h, w) = img.shape[:2]
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, thetas, 1.0)
+            img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+            return img
+    return img
+
+
 def histo_equlization(img):
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -181,16 +182,16 @@ def insert_dose(dose, text, _x1, _x3, x3):
         if '일수' in text or '투약' in text:
             diff = diff//2
             if not dose['daily_dose']:
-                dose['daily_dose'].append([_x1 + x3+3, _x1 + diff + x3])
+                dose['daily_dose'].append([_x1 + x3, _x1 + diff + x3])
             else:
-                dose['daily_dose'][0][0] = min(dose['daily_dose'][0][0], _x1 + x3+3)
+                dose['daily_dose'][0][0] = min(dose['daily_dose'][0][0], _x1 + x3)
                 dose['daily_dose'][0][1] = max(dose['daily_dose'][0][1], _x1 + diff + x3)
             _x1 += diff
             if not dose['total_dose']:
-                dose['total_dose'].append([_x1 + x3, _x1 + diff + x3 + 10])
+                dose['total_dose'].append([_x1 + x3, _x1 + diff + x3])
             else:
                 dose['total_dose'][0][0] = min(dose['total_dose'][0][0], _x1 + x3)
-                dose['total_dose'][0][1] = max(dose['total_dose'][0][1], _x1 + diff + x3 + 10)
+                dose['total_dose'][0][1] = max(dose['total_dose'][0][1], _x1 + diff + x3)
         else:
             if not dose['daily_dose']:
                 dose['daily_dose'].append([_x1 + x3, _x1 + diff + x3])
@@ -203,7 +204,7 @@ def insert_dose(dose, text, _x1, _x3, x3):
             dose['total_dose'].append([_x1 + x3, _x1 + diff + x3])
         else:
             dose['total_dose'][0][0] = min(dose['total_dose'][0][0], _x1 + x3)
-            dose['total_dose'][0][1] = max(dose['total_dose'][0][1], _x1 + diff + x3 + 10)
+            dose['total_dose'][0][1] = max(dose['total_dose'][0][1], _x1 + diff + x3)
         return True
     return False
 
@@ -240,7 +241,7 @@ def extract_information(img, crafts, refine):
         title = re.sub('[-=+,#/\?:^$.@*\"※~&%ㆍ!』\\‘|\(\)\[\]\<\>`\'…》]', '', title)
         if '처방 의약품의' in title or '의약품의' in title:
             diff = (y3 - y1)
-            diff += diff//2
+            diff += diff//4
             croped = img[y1 - diff:y3 + diff, x3:W]
             dosebox = text_detector.text_detect(crafts, refine, croped)
             box2 = []
@@ -261,7 +262,7 @@ def extract_information(img, crafts, refine):
         title = re.sub('[-=+,#/\?:^$.@*\"※~&%ㆍ!』\\‘|\(\)\[\]\<\>`\'…》]', '', title)
         if '처방 의약품의' in title or '의약품의' in title:
             diff = (y3 - y1)
-            diff += diff//2
+            diff += diff//4
             croped = img[y1 - diff:y3 + diff, x3:W]
             dosebox = text_detector.text_detect(crafts, refine, croped)
             box2 = []
@@ -283,35 +284,42 @@ def extract_information(img, crafts, refine):
         if dose['single_dose']:
             x1, x3 = dose['single_dose'][0]
             if not dose['daily_dose'] and not dose['total_dose']:
-                diff = x3 - x1
-                diff = diff//4
-                dose['daily_dose'].append([x3 + diff, x3 + diff*2 + diff//2])
-                dose['total_dose'].append([x3+diff*2 + diff//2, min(x3 + diff*4,W)])
+                diff = W - x3
+                diff = diff//2
+                dose['daily_dose'].append([x3, x3 + diff])
+                dose['total_dose'].append([x3+diff, W])
             elif dose['daily_dose'] and not dose['total_dose']:
                 x1, x3 = dose['daily_dose'][0]
-                diff = x3 - x1
-                dose['total_dose'].append([x3 + diff//2, x3 + diff + diff//2])
+                diff = W - x3
+                diff = diff//2
+                dose['total_dose'].append([x3, x3 + diff])
             else:
-                _x1, _x3 = dose['total_dose'][0]
-                diff = _x3 - _x1
-                dose['daily_dose'].append([x3 + diff//2, x3 + diff + diff//2])
+                x1, _ = dose['total_dose'][0]
+                dose['daily_dose'].append([x3, x1])
         elif dose['daily_dose']:
             x1, x3 = dose['daily_dose'][0]
             if dose['total_dose']:
-                diff = x3 - x1
-                dose['single_dose'].append([x1 - diff//2 - diff, x1 - diff//2])
+                _x1, _x3 = dose['total_dose'][0]
+                diff = _x1 - x3
+                dose['single_dose'].append([x1 - diff*2, x1 - diff])
             else:
-                diff = x3 - x1
-                dose['single_dose'].append([x1 - diff//2 - diff, x1 - diff//2])
-                dose['total_dose'].append([x3 + diff//2, x3 + diff//2 + diff])
+                diff = x3-x1
+                dose['single_dose'].append([x1 - diff*4, x1 - diff])
+                dose['total_dose'].append([x3 + diff, x3 + diff*2])
         else:
             if dose['total_dose']:
                 x1, x3 = dose['total_dose'][0]
                 diff = x3 - x1
-                dose['daily_dose'].append([x1 - diff - diff//2, x1 - diff//2])
-                dose['single_dose'].append([x1 - diff*4, x1 - diff*2])
+                dose['daily_dose'].append([x1 - diff*2 ,x1 - diff])
+                dose['single_dose'].append([x1 - diff*6, x1 - diff*4])
 
     # 각 박스를 보며 약품 코드의 박스인 경우 DB비교 후 결과에 저장
+    if dose['single_dose']:
+        x1, x3 = dose['single_dose'][0]
+        diff = x3-x1
+        diff = diff//4
+        dose['single_dose'][0] = (x1+diff, x3-diff)
+
     for (y1, x1), (y3, x3) in box:
         crop = img[y1:y3, x1:x3]
         gray = cv2.pyrUp(crop)
@@ -326,12 +334,12 @@ def extract_information(img, crafts, refine):
                 for obj in dose:
                     if not dose[obj]: continue
                     _x1, _x3 = dose[obj][0]
-                    number = img[y1:y3, _x1:_x3]
-                    if obj == 'total_dose':
-                        number = img[y1-5:y3+5, _x1-5:_x3+5]
+                    number = img[y1-5:y3+5, _x1:_x3+5]
                     number = cv2.pyrUp(number)
                     number = cv2.cvtColor(number, cv2.COLOR_BGR2GRAY)
                     text = pt.image_to_string(number, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+                    #print('case 1', text)
+                    #print_img(number)
                     if text and int(text) <= 30:
                         drug[0][obj] = text
                         cv2.imwrite('numbers/' + str(drug[0]['code']) + obj + '_res_' + text + '.jpg', number)
@@ -340,6 +348,8 @@ def extract_information(img, crafts, refine):
                         number = image_contrast(number)
                         text = pt.image_to_string(number,
                                                   config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+                        #print('case 2', text)
+                        #print_img(number)
                         if text and int(text) <= 30:
                             drug[0][obj] = text
                             cv2.imwrite('numbers/' + str(drug[0]['code']) + obj + '_res_' + text + '.jpg', number)
@@ -358,16 +368,18 @@ def extract_information(img, crafts, refine):
                 for obj in dose:
                     if not dose[obj]: continue
                     (_x1, _x3) = dose[obj][0]
-                    number = img[y1:y3, _x1:_x3]
-                    if obj == 'total_dose':
-                        number = img[y1-5:y3+5, _x1-5:_x3+5]
+                    number = img[y1-5:y3+5, _x1:_x3+5]
                     number = cv2.pyrUp(number)
                     number = cv2.cvtColor(number, cv2.COLOR_BGR2GRAY)
                     text = pt.image_to_string(number, config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+                    #print('case 3', text)
+                    #print_img(number)
                     if text and int(text) <= 30:
                         drug[0][obj] = text
                         cv2.imwrite('numbers/' + str(drug[0]['code']) + obj + '_res_' + text + '.jpg', number)
                     else:
+                        #print('case 4', text)
+                        #print_img(number)
                         number = cv2.cvtColor(number, cv2.COLOR_GRAY2BGR)
                         number = image_contrast(number)
                         text = pt.image_to_string(number,
@@ -428,29 +440,20 @@ def edge_detect(img):
             mtrx = cv2.getPerspectiveTransform(pts1, pts2)
             # 원근 변환 적용
             result = cv2.warpPerspective(img, mtrx, (width, height))
-            return result, True
         else:
             result = img
-            return result, False
     except Exception:
         result = img
-        return result, False
+
+    return result
 
 
 def image_warp(src_loc, crafts, refine):
     # 이미지 읽기
     img = cv2.imread(src_loc)
     img, rot = image_resize(img)
+    img = edge_detect(img)
     img = hough_linep(img)
-    # grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # angle = determine_skew(grayscale)
-    # img = rotate(img, angle, (0, 0, 0))
-    # img, tr = edge_detect(img)
-    # if not tr:
-    #     # grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #     # angle = determine_skew(grayscale)
-    #     # img = rotate(img, angle, (0, 0, 0))
-    #     img = hough_linep(img)
     if rot:
         res = extract_information(img, crafts, refine)
         if res['drugs']:
@@ -464,7 +467,7 @@ def image_warp(src_loc, crafts, refine):
 
 
 def accuracy_test(crafts, refine):
-    files = glob.glob('image/test3/*.jpg')
+    files = glob.glob('image/test/*.jpg')
     cnt = 0
     codecnt = 0
     singlecnt = 0

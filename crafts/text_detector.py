@@ -7,7 +7,7 @@ MIT License
 import os
 import time
 import argparse
-import image_proc as ip
+import image_proc_2 as ip
 
 import glob
 import torch
@@ -124,11 +124,11 @@ def text_detect(net, refine_net, image):
                                          args.cuda, args.poly, refine_net)
 
     # save score text
-    # filename = time.strftime("%Y%m%d-%H%M%S")
-    # mask_file = result_folder + "/res_" + filename + '_mask.jpg'
-    # cv2.imwrite(mask_file, score_text)
-    #
-    # crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
+    filename = time.strftime("%Y%m%d-%H%M%S")
+    mask_file = result_folder + "/res_" + filename + '_mask.jpg'
+    #cv2.imwrite(mask_file, score_text)
+
+    crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
     #
     # print("elapsed time : {}s".format(time.time() - t))
 

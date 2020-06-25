@@ -1,7 +1,6 @@
 import requests
 import json
 import re
-
 import os
 import dialogflow_v2 as dialogflow
 

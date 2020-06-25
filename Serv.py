@@ -11,16 +11,14 @@ from flask import request
 
 import chat
 from crafts import craft
-from crafts import text_detector
 from crafts import refinenet
-import image_proc as imp
+import pract as imp
 
 app = flask.Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
-
-net = None
 refine_net = None
 crafts = None
+
 
 @app.route('/', methods=['GET', 'POST'])
 def hello():
@@ -45,7 +43,7 @@ def handle_request():
         filename = os.path.join('image', filename)
         imagefile.save(filename)
         try:
-            ret = imp.image_warp(filename, net, crafts, refine_net)
+            ret = imp.image_warp(filename, crafts, refine_net)
             #ret = text_detector.text_detect(net, refine_net, filename)
         except Exception as ex:
             print('에러가 발생했습니다.', ex)
@@ -91,5 +89,4 @@ def load_east():
 
 if __name__ == "__main__":
     crafts, refine_net = load_craft()
-    net = load_east()
     app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)

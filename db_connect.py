@@ -118,4 +118,4 @@ def save_name_code():
 
 
 if __name__ == "__main__":
-    save_name_code()
+    print(selectQuery('640002670'))
