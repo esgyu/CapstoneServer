@@ -35,6 +35,7 @@ def detect_intent_texts(texts, user_name):
     return answer
 
 
+# Dialogflow API V1 방식의 통신, 곧 서비스 중단 예정으로 API V2로 대체함
 def get_answer(text, user_key):
     data_send = {
         'query': text,

@@ -100,7 +100,6 @@ def print_img(img):
     cv2.destroyAllWindows()
 
 
-# 높이-너비 비율이 4:3 또는 16:9가 아닌 경우 시계방향 90도 회전
 def image_resize(img):
     height, width = img.shape[:2]
     rot = False
@@ -442,15 +441,6 @@ def image_warp(src_loc, crafts, refine):
     img = cv2.imread(src_loc)
     img, rot = image_resize(img)
     img = hough_linep(img)
-    # grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # angle = determine_skew(grayscale)
-    # img = rotate(img, angle, (0, 0, 0))
-    # img, tr = edge_detect(img)
-    # if not tr:
-    #     # grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #     # angle = determine_skew(grayscale)
-    #     # img = rotate(img, angle, (0, 0, 0))
-    #     img = hough_linep(img)
     if rot:
         res = extract_information(img, crafts, refine)
         if res['drugs']:
@@ -464,7 +454,7 @@ def image_warp(src_loc, crafts, refine):
 
 
 def accuracy_test(crafts, refine):
-    files = glob.glob('image/test3/*.jpg')
+    files = glob.glob('image/test/*.jpg')
     cnt = 0
     codecnt = 0
     singlecnt = 0
@@ -508,8 +498,6 @@ def accuracy_test(crafts, refine):
             print('Answer', code, single, daily, total)
             print('Recog', target['code'], target['single_dose'], target['daily_dose'], target['total_dose'])
         print(cnt, codecnt, singlecnt, dailycnt, totalcnt)
-        # if tempcnt != len(result['drugs']):
-        #     cv2.imwrite(str(pydatetime.datetime.now().timestamp()) + '.jpg', cv2.imread(file))
     print('Total Processed Document : ', total_document)
     print('Code Accuracy :', (codecnt / cnt) * 100)
     print('Single Dose Accuracy :', (singlecnt / cnt) * 100)
@@ -520,5 +508,3 @@ def accuracy_test(crafts, refine):
 if __name__ == '__main__':
     crafts, refine = load_craft()
     accuracy_test(crafts, refine)
-    # for file in glob.glob('image/test/*.jpg'):
-    #     image_warp(file, crafts, refine)

@@ -7,8 +7,6 @@ MIT License
 import os
 import time
 import argparse
-import image_proc_2 as ip
-
 import glob
 import torch
 from torch.autograd import Variable
@@ -99,7 +97,6 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
     boxes, polys = crafts.craft_utils.getDetBoxes(score_text, score_link, text_threshold, link_threshold, low_text,
                                                   poly)
 
-    # coordinate adjustment
     boxes = crafts.craft_utils.adjustResultCoordinates(boxes, ratio_w, ratio_h)
     polys = crafts.craft_utils.adjustResultCoordinates(polys, ratio_w, ratio_h)
     for k in range(len(polys)):
@@ -107,7 +104,6 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
 
     t1 = time.time() - t1
 
-    # render results (optional)
     render_img = score_text.copy()
     render_img = np.hstack((render_img, score_link))
     ret_score_text = crafts.imgproc.cvt2HeatmapImg(render_img)
@@ -118,19 +114,13 @@ def test_net(net, image, text_threshold, link_threshold, low_text, cuda, poly, r
 
 
 def text_detect(net, refine_net, image):
-    t = time.time()
-
     boxes, polys, score_text = test_net(net, image, args.text_threshold, args.link_threshold, args.low_text,
                                          args.cuda, args.poly, refine_net)
 
-    # save score text
     filename = time.strftime("%Y%m%d-%H%M%S")
     mask_file = result_folder + "/res_" + filename + '_mask.jpg'
-    #cv2.imwrite(mask_file, score_text)
 
     crafts.file_utils.saveResult(mask_file, image[:, :, ::-1], polys, dirname=result_folder)
-    #
-    # print("elapsed time : {}s".format(time.time() - t))
 
     return boxes
 

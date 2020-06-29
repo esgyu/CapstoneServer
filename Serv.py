@@ -20,11 +20,6 @@ refine_net = None
 crafts = None
 
 
-@app.route('/', methods=['GET', 'POST'])
-def hello():
-    return 'Hello Main!'
-
-
 @app.route('/webhook', methods=['POST'])
 def webhook():
     message = request.form['message']
@@ -44,7 +39,6 @@ def handle_request():
         imagefile.save(filename)
         try:
             ret = imp.image_warp(filename, crafts, refine_net)
-            #ret = text_detector.text_detect(net, refine_net, filename)
         except Exception as ex:
             print('에러가 발생했습니다.', ex)
             return 'Image Processing Failed!'
@@ -80,11 +74,6 @@ def load_craft():
     refine_nets.load_state_dict(
         copyStateDict(torch.load('CRAFTS/weights/craft_refiner_CTW1500.pth', map_location='cpu')))
     return nets, refine_nets
-
-
-def load_east():
-    print("[INFO] loading EAST text detector...")
-    return cv2.dnn.readNet('frozen_east_text_detection.pb')
 
 
 if __name__ == "__main__":
