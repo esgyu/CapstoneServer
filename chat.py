@@ -44,7 +44,7 @@ def get_answer(text, user_key):
     }
 
     data_header = {
-        'Authorization': 'Bearer dffd67b00f1d4386ad15c8e1f3322d33',
+        'Authorization': 'Bearer Your API Key',
         'Content-Type': 'application/json; charset=utf-8'
     }
 
